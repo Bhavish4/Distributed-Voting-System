@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Sign in to VoteChain — Distributed Voting System">
+  <title>VoteChain — Sign In</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="/static/firebase.js"></script>
+  <style>
+    /* ── Login page extras ──────────────────────────── */
+    .login-wrapper {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 420px;
+      background: rgba(14, 20, 44, 0.80);
+      backdrop-filter: blur(24px) saturate(1.3);
+      -webkit-backdrop-filter: blur(24px) saturate(1.3);
+      border: 1px solid rgba(99, 130, 255, 0.22);
+      border-radius: 24px;
+      padding: 44px 40px 36px;
+      box-shadow: 0 32px 80px rgba(0,0,0,.7), 0 1px 0 rgba(255,255,255,.06) inset;
+      animation: fadeInUp .5s cubic-bezier(.16,1,.3,1) both;
+    }
+
+    .login-brand {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 32px;
+    }
+    .login-logo {
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--cyan) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      box-shadow: 0 0 40px var(--accent-glow), 0 0 80px rgba(34,211,238,.15);
+      margin-bottom: 16px;
+    }
+    .login-brand h1 {
+      font-size: 1.55rem;
+      font-weight: 800;
+      letter-spacing: -.03em;
+      background: linear-gradient(135deg, #fff 40%, var(--accent-light) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 4px;
+    }
+    .login-brand p {
+      font-size: .85rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    /* Tabs */
+    .login-tabs {
+      display: flex;
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(99,130,255,.14);
+      border-radius: 10px;
+      padding: 3px;
+      margin-bottom: 24px;
+      gap: 2px;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 0;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: .85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      box-shadow: none;
+      transform: none !important;
+      letter-spacing: .01em;
+    }
+    .tab-btn:hover:not(:disabled) {
+      color: var(--text-secondary);
+      background: rgba(99,102,241,.08);
+      box-shadow: none;
+      filter: none;
+    }
+    .tab-btn.active {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 4px 14px var(--accent-glow);
+    }
+    .tab-btn.active:hover {
+      background: var(--accent);
+      filter: brightness(1.08);
+    }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Email/password form */
+    .login-form label {
+      text-transform: none;
+      letter-spacing: 0;
+      font-size: .8rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      display: block;
+      margin-bottom: 5px;
+    }
+    .input-wrap {
+      position: relative;
+      margin-bottom: 14px;
+    }
+    .input-wrap .input-icon {
+      position: absolute;
+      left: 13px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 15px;
+      pointer-events: none;
+      opacity: .5;
+    }
+    .input-wrap input {
+      padding-left: 38px;
+      margin: 0;
+    }
+    .input-wrap .eye-toggle {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: transparent;
+      border: 0;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+      box-shadow: none;
+      transform: translateY(-50%) !important;
+    }
+    .input-wrap .eye-toggle:hover {
+      color: var(--text-secondary);
+      background: rgba(255,255,255,.06);
+      box-shadow: none;
+      filter: none;
+    }
+
+    .login-submit {
+      width: 100%;
+      padding: 12px;
+      font-size: .95rem;
+      border-radius: 10px;
+      justify-content: center;
+      margin-top: 4px;
+    }
+
+    /* OR divider */
+    .or-divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 20px 0;
+      color: var(--text-muted);
+      font-size: .8rem;
+      font-weight: 500;
+    }
+    .or-divider::before,
+    .or-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: rgba(99,130,255,.15);
+    }
+
+    /* Google button full-width */
+    .btn-google-full {
+      width: 100%;
+      justify-content: center;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: .93rem;
+    }
+
+    /* Demo box */
+    .demo-box {
+      margin-top: 20px;
+      background: rgba(99,102,241,.07);
+      border: 1px solid rgba(99,102,241,.2);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .demo-box-label {
+      font-size: .75rem;
+      font-weight: 700;
+      color: var(--accent-light);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: 10px;
+    }
+    .demo-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .demo-row:last-of-type { margin-bottom: 0; }
+    .demo-field { display: flex; flex-direction: column; gap: 1px; }
+    .demo-field-label { font-size: .7rem; color: var(--text-muted); font-weight: 500; }
+    .demo-value {
+      font-size: .88rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      letter-spacing: .01em;
+    }
+    .demo-copy-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 10px;
+      background: rgba(99,102,241,.12);
+      border: 1px solid rgba(99,102,241,.25);
+      color: var(--accent-light);
+      border-radius: 6px;
+      font-size: .75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      box-shadow: none;
+      transform: none !important;
+      font-family: inherit;
+    }
+    .demo-copy-btn:hover {
+      background: rgba(99,102,241,.22);
+      box-shadow: none;
+      filter: none;
+    }
+    .demo-note {
+      font-size: .75rem;
+      color: var(--text-muted);
+      margin-top: 10px;
+      line-height: 1.5;
+    }
+    .demo-fill-btn {
+      width: 100%;
+      justify-content: center;
+      padding: 7px;
+      font-size: .82rem;
+      background: rgba(99,102,241,.12);
+      border: 1px solid rgba(99,102,241,.25);
+      color: var(--accent-light);
+      border-radius: 8px;
+      margin-top: 10px;
+      box-shadow: none;
+    }
+    .demo-fill-btn:hover {
+      background: rgba(99,102,241,.22);
+      box-shadow: none;
+      filter: none;
+    }
+
+    /* Footer note */
+    .login-footer {
+      text-align: center;
+      margin-top: 20px;
+      font-size: .78rem;
+      color: var(--text-muted);
+    }
+
+    /* Floating orbs behind card */
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(80px);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .orb-1 {
+      width: 400px; height: 400px;
+      background: rgba(99,102,241,.18);
+      top: -80px; left: -80px;
+    }
+    .orb-2 {
+      width: 320px; height: 320px;
+      background: rgba(34,211,238,.12);
+      bottom: -60px; right: -60px;
+    }
+    .orb-3 {
+      width: 200px; height: 200px;
+      background: rgba(139,92,246,.10);
+      top: 50%; left: 50%;
+      transform: translate(-50%,-50%);
+    }
+
+    @media (max-width: 480px) {
+      .login-card { padding: 32px 22px 28px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Ambient orbs -->
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="orb orb-3"></div>
+
+<div class="login-wrapper">
+  <div class="login-card">
+
+    <!-- Brand -->
+    <div class="login-brand">
+      <div class="login-logo">🗳</div>
+      <h1>VoteChain</h1>
+      <p>Distributed &amp; fault-tolerant voting platform</p>
+    </div>
+
+    <!-- Alert -->
+    <div id="loginMsg" class="msg" hidden></div>
+
+    <!-- Tabs -->
+    <div class="login-tabs" role="tablist">
+      <button class="tab-btn active" id="tab-email" onclick="switchTab('email')" role="tab" aria-selected="true">Email &amp; Password</button>
+      <button class="tab-btn" id="tab-google" onclick="switchTab('google')" role="tab" aria-selected="false">Google SSO</button>
+    </div>
+
+    <!-- ── Tab: Email/Password ── -->
+    <div class="tab-panel active" id="panel-email">
+      <form class="login-form" onsubmit="doEmailSignIn(event)" autocomplete="on" novalidate>
+
+        <label for="emailInput">Email address</label>
+        <div class="input-wrap">
+          <span class="input-icon">✉️</span>
+          <input type="email" id="emailInput" name="email" placeholder="you@example.com" autocomplete="email" required>
+        </div>
+
+        <label for="passInput">Password</label>
+        <div class="input-wrap">
+          <span class="input-icon">🔒</span>
+          <input type="password" id="passInput" name="password" placeholder="••••••••" autocomplete="current-password" required>
+          <button type="button" class="eye-toggle" onclick="togglePass()" id="eyeBtn" title="Show/hide password">👁</button>
+        </div>
+
+        <button type="submit" class="login-submit" id="emailSubmitBtn">Sign In</button>
+      </form>
+
+      <!-- Demo credentials -->
+      <div class="demo-box">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div class="demo-box-label" style="margin-bottom:0">🔑 Demo Account</div>
+          <span class="badge badge-admin" style="font-size:.7rem;padding:2px 8px;">Role: Admin</span>
+        </div>
+        <div class="demo-row">
+          <div class="demo-field">
+            <span class="demo-field-label">Email</span>
+            <span class="demo-value" id="demoEmail">demo@admin.com</span>
+          </div>
+          <button class="demo-copy-btn" onclick="copyDemo('demoEmail', this)" type="button">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy
+          </button>
+        </div>
+        <div class="demo-row">
+          <div class="demo-field">
+            <span class="demo-field-label">Password</span>
+            <span class="demo-value" id="demoPass">Admin@123</span>
+          </div>
+          <button class="demo-copy-btn" onclick="copyDemo('demoPass', this)" type="button">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy
+          </button>
+        </div>
+        <button class="demo-fill-btn" onclick="fillDemo()" type="button">⚡ Auto-fill credentials</button>
+        <p class="demo-note">This account has <b>Administrator</b> privileges. You can manage elections, candidates, and results in the Admin dashboard.</p>
+      </div>
+    </div>
+
+    <!-- ── Tab: Google SSO ── -->
+    <div class="tab-panel" id="panel-google">
+      <p style="color:var(--text-secondary);font-size:.9rem;text-align:center;margin-bottom:20px;line-height:1.7">
+        Sign in securely with your Google account. No password needed — we use Firebase Authentication.
+      </p>
+      <button class="btn-google btn-google-full" onclick="doGoogleSignIn()" id="googleBtn">
+        <svg width="20" height="20" viewBox="0 0 48 48">
+          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+        </svg>
+        Continue with Google
+      </button>
+
+      <div class="or-divider">or use demo account</div>
+
+      <!-- Demo credentials on Google tab too -->
+      <div class="demo-box">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div class="demo-box-label" style="margin-bottom:0">🔑 Demo Account</div>
+          <span class="badge badge-admin" style="font-size:.7rem;padding:2px 8px;">Role: Admin</span>
+        </div>
+        <div class="demo-row">
+          <div class="demo-field">
+            <span class="demo-field-label">Email</span>
+            <span class="demo-value">demo@admin.com</span>
+          </div>
+          <button class="demo-copy-btn" onclick="copyText('demo@admin.com', this)" type="button">
+            <svg width="12" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy
+          </button>
+        </div>
+        <div class="demo-row">
+          <div class="demo-field">
+            <span class="demo-field-label">Password</span>
+            <span class="demo-value">Admin@123</span>
+          </div>
+          <button class="demo-copy-btn" onclick="copyText('Admin@123', this)" type="button">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy
+          </button>
+        </div>
+        <p class="demo-note">Sign in with the Google account associated with <b>demo@admin.com</b> to obtain full <b>Administrator</b> privileges.</p>
+      </div>
+    </div>
+
+    <div class="login-footer">
+      ⚠️ Academic prototype &nbsp;·&nbsp; Ballots are <b>not secret</b>
+    </div>
+  </div>
+</div>
+
+<script>
+const loginMsg = document.getElementById("loginMsg");
+
+// ── Tab switching ────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll(".tab-btn").forEach(b => {
+    b.classList.toggle("active", b.id === "tab-" + tab);
+    b.setAttribute("aria-selected", b.id === "tab-" + tab);
+  });
+  document.querySelectorAll(".tab-panel").forEach(p => {
+    p.classList.toggle("active", p.id === "panel-" + tab);
+  });
+  loginMsg.hidden = true;
+}
+
+// ── Password toggle ──────────────────────────────
+function togglePass() {
+  const inp = document.getElementById("passInput");
+  const btn = document.getElementById("eyeBtn");
+  if (inp.type === "password") {
+    inp.type = "text";
+    btn.textContent = "🙈";
+  } else {
+    inp.type = "password";
+    btn.textContent = "👁";
+  }
+}
+
+// ── Google sign-in ───────────────────────────────
+async function doGoogleSignIn() {
+  const btn = document.getElementById("googleBtn");
+  btn.disabled = true;
+  btn.textContent = "Signing in…";
+  loginMsg.hidden = true;
+  try {
+    await signIn();
+    location.href = "/";
+  } catch(e) {
+    showMsg(loginMsg, e.message);
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg> Continue with Google';
+  }
+}
+
+// ── Email/password sign-in ───────────────────────
+async function doEmailSignIn(e) {
+  e.preventDefault();
+  const email = document.getElementById("emailInput").value.trim();
+  const pass  = document.getElementById("passInput").value;
+  if (!email || !pass) return showMsg(loginMsg, "Please enter your email and password.");
+
+  const btn = document.getElementById("emailSubmitBtn");
+  btn.disabled = true;
+  btn.textContent = "Signing in…";
+  loginMsg.hidden = true;
+
+  try {
+    await firebase.auth().signInWithEmailAndPassword(email, pass);
+    location.href = "/";
+  } catch(err) {
+    const msgs = {
+      "auth/user-not-found":      "No account found with this email.",
+      "auth/wrong-password":      "Incorrect password. Please try again.",
+      "auth/invalid-email":       "Please enter a valid email address.",
+      "auth/too-many-requests":   "Too many failed attempts. Try again later.",
+      "auth/user-disabled":       "This account has been disabled.",
+      "auth/invalid-credential":  "Invalid email or password.",
+    };
+    showMsg(loginMsg, msgs[err.code] || "Sign-in failed: " + err.message);
+    btn.disabled = false;
+    btn.textContent = "Sign In";
+  }
+}
+
+// ── Demo helpers ─────────────────────────────────
+function fillDemo() {
+  document.getElementById("emailInput").value = "demo@admin.com";
+  document.getElementById("passInput").value  = "Admin@123";
+  document.getElementById("passInput").type   = "password";
+  document.getElementById("eyeBtn").textContent = "👁";
+}
+
+function copyDemo(id, btn) {
+  copyText(document.getElementById(id).textContent, btn);
+}
+
+function copyText(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
+    btn.style.color = 'var(--emerald)';
+    btn.style.borderColor = 'rgba(52,211,153,.4)';
+    setTimeout(() => { btn.innerHTML = orig; btn.style.color = ''; btn.style.borderColor = ''; }, 2000);
+  });
+}
+
+// ── Auto-redirect if already signed in ──────────
+authReady.then(u => {
+  if (u) location.href = "/";
+});
+</script>
+</body>
+</html>

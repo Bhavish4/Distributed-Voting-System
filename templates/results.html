@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Live election results for the Distributed Voting System.">
+  <title>VoteChain — Results</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="/static/firebase.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="nav-brand">
+    <div class="logo-icon">📊</div>
+    VoteChain
+  </div>
+  <nav class="nav-links">
+    <a href="/">&larr; Back to Elections</a>
+  </nav>
+  <div class="nav-user"></div>
+</header>
+
+<main>
+  <div id="msg" class="msg" hidden></div>
+
+  <!-- Loading state -->
+  <div id="loading" class="card" style="text-align:center;padding:48px">
+    <span class="loader"></span>
+    <p style="color:var(--text-muted);margin-top:16px">Loading results…</p>
+  </div>
+
+  <!-- Results container -->
+  <div id="r" hidden></div>
+</main>
+
+<script>
+(async () => {
+  const msg     = document.getElementById("msg");
+  const loading = document.getElementById("loading");
+
+  try {
+    const id = new URLSearchParams(location.search).get("e");
+    if (!id) throw new Error("No election ID specified.");
+
+    const d = await apiFetch("/api/elections/" + encodeURIComponent(id) + "/results");
+    const r = document.getElementById("r");
+    loading.hidden = true;
+
+    const max = Math.max(1, ...d.candidates.map(c => c.votes));
+    const winner = d.candidates.reduce((a, b) => (b.votes > a.votes ? b : a), d.candidates[0] || {});
+
+    // Status badge
+    const statusClass = d.effective_status === "open" ? "badge-open"
+      : d.effective_status === "closed" ? "badge-closed"
+      : "badge-draft";
+
+    // Results header
+    let html = '<div class="card fade-in">'
+      + '<div class="results-header">'
+      +   '<div>'
+      +     '<div class="results-title">' + esc(d.title) + '</div>'
+      +     '<div class="results-subtitle">Election Results</div>'
+      +   '</div>'
+      +   '<span class="badge ' + statusClass + '">' + esc(d.effective_status) + '</span>'
+      + '</div>'
+
+      // Stats
+      + '<div class="stats-row">'
+      +   '<div class="stat-chip"><div class="stat-value">' + d.total_votes + '</div><div class="stat-label">Total Votes</div></div>'
+      +   '<div class="stat-chip"><div class="stat-value">' + d.candidates.length + '</div><div class="stat-label">Candidates</div></div>'
+      +   (winner && d.total_votes > 0
+            ? '<div class="stat-chip"><div class="stat-value" style="font-size:1.1rem;padding-top:4px">' + esc(winner.name) + '</div><div class="stat-label">Leading</div></div>'
+            : '')
+      + '</div>'
+
+      + '<div class="section-title">Vote Breakdown</div>';
+
+    // Sort by votes descending
+    const sorted = [...d.candidates].sort((a, b) => b.votes - a.votes);
+
+    sorted.forEach((c, i) => {
+      const pct = max > 0 ? Math.round(100 * c.votes / max) : 0;
+      const isWinner = c.votes === winner.votes && d.total_votes > 0 && i === 0;
+      const totalPct = d.total_votes > 0 ? Math.round(100 * c.votes / d.total_votes) : 0;
+
+      html += '<div class="result-item' + (isWinner ? ' result-winner' : '') + '">'
+        + '<div class="result-label">'
+        +   '<span class="result-name">' + (isWinner ? '🏆 ' : '') + esc(c.name) + '</span>'
+        +   '<span class="result-votes">' + c.votes + ' votes &nbsp;·&nbsp; ' + totalPct + '%</span>'
+        + '</div>'
+        + '<div class="bar"><div id="bar_' + i + '" style="width:0%" data-w="' + pct + '"></div></div>'
+        + '</div>';
+    });
+
+    html += '</div>'; // close card
+
+    r.innerHTML = html;
+    r.hidden = false;
+
+    // Animate bars after paint
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        sorted.forEach((_, i) => {
+          const bar = document.getElementById("bar_" + i);
+          if (bar) bar.style.width = bar.dataset.w + "%";
+        });
+      }, 120);
+    });
+
+  } catch(e) {
+    loading.hidden = true;
+    showMsg(msg, e.message);
+  }
+})();
+</script>
+</body>
+</html>

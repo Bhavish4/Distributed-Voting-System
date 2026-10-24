@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Cast your vote securely in distributed elections.">
+  <title>VoteChain — Elections</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="/static/firebase.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="nav-brand">
+    <div class="logo-icon">🗳</div>
+    VoteChain
+  </div>
+  <nav class="nav-links">
+    <a href="/" id="navElections">Elections</a>
+    <a href="/admin" id="adminLink" hidden>Admin</a>
+  </nav>
+  <div class="nav-user" id="who"></div>
+</header>
+
+<main>
+  <div id="msg" class="msg" hidden></div>
+
+  <div id="out" class="card signin-hero" hidden>
+    <div class="hero-icon">🗳</div>
+    <h2>Welcome to VoteChain</h2>
+    <p>A distributed, fault-tolerant voting platform. Sign in to participate in active elections or manage ballots.</p>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;align-items:center;margin-top:14px;">
+      <a href="/login" class="btn btn-primary" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;padding:11px 20px;border-radius:10px;">
+        🔑 Sign In Page (Email / Demo)
+      </a>
+      <button class="btn-google" onclick="doSignIn()" id="signinBtn">
+        <svg width="20" height="20" viewBox="0 0 48 48">
+          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+        </svg>
+        Continue with Google
+      </button>
+    </div>
+  </div>
+
+  <div id="list"></div>
+
+  <div class="privacy-note">
+    ⚠️ <span><b>Academic prototype.</b> Votes are stored with the voter's UID — ballots are <b>not secret</b>. Not suitable for real elections.</span>
+  </div>
+</main>
+
+<script>
+const msg = document.getElementById("msg");
+
+async function doSignIn() {
+  try { await signIn(); location.reload(); }
+  catch(e) { showMsg(msg, e.message); }
+}
+
+async function load() {
+  const u = await authReady;
+  const out = document.getElementById("out");
+  const who = document.getElementById("who");
+
+  if (!u) {
+    out.hidden = false;
+    who.innerHTML = '<a href="/login" class="btn btn-secondary btn-sm" style="text-decoration:none;font-size:0.82rem;padding:6px 14px;border-radius:8px;">Sign In</a>';
+    document.getElementById("list").innerHTML = "";
+    return;
+  }
+  out.hidden = true;
+
+  try {
+    const me = await apiFetch("/api/me");
+    const roleClass = me.role === "admin" ? "badge-admin" : "badge-voter";
+    who.innerHTML =
+      '<span class="profile">'
+      + (me.picture ? '<img src="' + esc(me.picture) + '" referrerpolicy="no-referrer">' : '')
+      + '<span class="profile-name">' + esc(me.name || me.email) + '</span>'
+      + ' <span class="badge ' + roleClass + '">' + esc(me.role) + '</span>'
+      + ' <button class="sec" onclick="signOut()">Sign out</button>'
+      + '</span>';
+
+    document.getElementById("adminLink").hidden = me.role !== "admin";
+
+    const els = await apiFetch("/api/elections");
+    const list = document.getElementById("list");
+
+    if (!els.length) {
+      list.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-icon">🗳️</div><p>No elections are available yet. Check back soon!</p></div></div>';
+      return;
+    }
+    list.innerHTML = els.map((e, i) => card(e, i)).join("");
+  } catch(e) { showMsg(msg, e.message); }
+}
+
+function badgeClass(s) {
+  if (s === "open")   return "badge-open";
+  if (s === "closed") return "badge-closed";
+  if (s === "draft")  return "badge-draft";
+  return "badge-default";
+}
+
+function card(e, idx) {
+  const open = e.effective_status === "open" && !e.has_voted;
+  const delays = ["fade-in-delay-1","fade-in-delay-2","fade-in-delay-3",""];
+  const delayClass = delays[Math.min(idx, 3)];
+
+  const candidatesHtml = e.candidates.map(c =>
+    '<label class="candidate-option"'+ (!open ? ' style="pointer-events:none;opacity:.55"' : '') +'>'
+    + '<input type="radio" name="c_' + e.id + '" value="' + c.id + '" ' + (open ? '' : 'disabled') + '>'
+    + '<span class="candidate-name">' + esc(c.name) + '</span>'
+    + (c.description ? '<span class="candidate-desc">' + esc(c.description) + '</span>' : '')
+    + '</label>'
+  ).join("");
+
+  return '<div class="card fade-in ' + delayClass + '">'
+    + '<div class="election-header">'
+    +   '<h3>' + esc(e.title) + '</h3>'
+    +   '<span class="badge ' + badgeClass(e.effective_status) + '">' + esc(e.effective_status) + '</span>'
+    + '</div>'
+    + '<div class="election-meta">🕐 ' + esc(e.start_time) + ' &rarr; ' + esc(e.end_time) + '</div>'
+    + (e.description ? '<p class="election-desc">' + esc(e.description) + '</p>' : '')
+    + '<div class="candidates-list">' + candidatesHtml + '</div>'
+    + (e.has_voted ? '<div class="voted-badge">✓ You have already voted</div>' : '')
+    + '<div class="btn-row">'
+    +   '<button ' + (open ? '' : 'disabled') + ' onclick="vote(\'' + e.id + '\')">🗳️ Cast Vote</button>'
+    +   (e.results_published ? '<a href="/results?e=' + e.id + '"><button class="sec">📊 View Results</button></a>' : '')
+    + '</div>'
+    + '</div>';
+}
+
+async function vote(id) {
+  const s = document.querySelector('input[name="c_' + id + '"]:checked');
+  if (!s) return showMsg(msg, "Please select a candidate first.");
+  try {
+    const r = await apiFetch("/api/elections/" + id + "/vote", {
+      method: "POST",
+      body: JSON.stringify({ candidate_id: s.value })
+    });
+    showMsg(msg, r.message, true);
+    load();
+  } catch(e) { showMsg(msg, e.message); load(); }
+}
+
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "default_role": "voter",
+  "roles": {
+    "bunnylucky0422@gmail.com": "admin",
+    "demo@admin.com": "admin"
+  }
+}

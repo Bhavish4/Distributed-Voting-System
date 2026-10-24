@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Admin dashboard for managing elections in the Distributed Voting System.">
+  <title>VoteChain — Admin</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="/static/firebase.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="nav-brand">
+    <div class="logo-icon">⚙️</div>
+    VoteChain Admin
+  </div>
+  <nav class="nav-links">
+    <a href="/">Elections</a>
+  </nav>
+  <div class="nav-user" id="who"></div>
+</header>
+
+<main>
+  <div id="msg" class="msg" hidden></div>
+
+  <!-- Gate: shown while auth check is pending or user is not admin -->
+  <div id="gate" class="card signin-hero">
+    <div class="hero-icon" style="font-size:20px">⏳</div>
+    <p style="color:var(--text-secondary)">Checking sign-in…</p>
+  </div>
+
+  <!-- Dashboard: shown to admins -->
+  <div id="dash" hidden>
+
+    <!-- Create Election -->
+    <div class="card fade-in" id="createCard">
+      <h2 class="section-title">Create New Election</h2>
+      <div class="form-group">
+        <label for="t">Title</label>
+        <input id="t" placeholder="e.g. Student Council President 2026">
+      </div>
+      <div class="form-group">
+        <label for="d">Description</label>
+        <textarea id="d" placeholder="Brief description of the election…"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="s">Start Time</label>
+          <input id="s" type="datetime-local">
+        </div>
+        <div class="form-group">
+          <label for="e">End Time</label>
+          <input id="e" type="datetime-local">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button id="create" onclick="createEl()">✨ Create Election (Draft)</button>
+      </div>
+    </div>
+
+    <!-- Elections list -->
+    <div id="list"></div>
+
+  </div>
+</main>
+
+<script>
+const msg  = document.getElementById("msg");
+const gate = document.getElementById("gate");
+function show(t, ok) { showMsg(msg, t, ok); }
+
+async function init() {
+  const u = await authReady;
+  if (!u) {
+    gate.innerHTML = '<div class="signin-hero"><div class="hero-icon">🔐</div><h2>Admin Access Required</h2><p>Sign in with your admin credentials to access this dashboard.</p><div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;align-items:center;margin-top:14px;"><a href="/login" class="btn btn-primary" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;padding:11px 20px;border-radius:10px;">🔑 Sign In (Email / Demo)</a><button class="btn-google" onclick="go()"><svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>Sign in with Google</button></div></div>';
+    return;
+  }
+
+  try {
+    const me = await apiFetch("/api/me");
+    const roleClass = me.role === "admin" ? "badge-admin" : "badge-voter";
+    document.getElementById("who").innerHTML =
+      '<span class="profile">'
+      + (me.picture ? '<img src="' + esc(me.picture) + '" referrerpolicy="no-referrer">' : '')
+      + '<span class="profile-name">' + esc(me.email) + '</span>'
+      + ' <span class="badge ' + roleClass + '">' + esc(me.role) + '</span>'
+      + ' <button class="sec" onclick="signOut()">Sign out</button>'
+      + '</span>';
+
+    if (me.role !== "admin") {
+      gate.innerHTML = '<div class="empty-state"><div class="empty-icon">🚫</div><p>Your account (<b>' + esc(me.email) + '</b>) is not an administrator.</p></div>';
+      return;
+    }
+    gate.hidden = true;
+    document.getElementById("dash").hidden = false;
+    load();
+  } catch(e) { gate.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p>' + esc(e.message) + '</p></div>'; }
+}
+
+async function go() {
+  try { await signIn(); location.reload(); }
+  catch(e) { show(e.message); }
+}
+
+async function load() {
+  try {
+    const els = await apiFetch("/api/elections");
+    const list = document.getElementById("list");
+    if (!els.length) {
+      list.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-icon">📋</div><p>No elections yet. Create one above!</p></div></div>';
+      return;
+    }
+    list.innerHTML = els.map((e, i) => elCard(e, i)).join("");
+  } catch(e) { show(e.message); }
+}
+
+function statusDot(s) {
+  if (s === "open")   return '<span class="badge badge-open">● Open</span>';
+  if (s === "closed") return '<span class="badge badge-closed">◼ Closed</span>';
+  if (s === "draft")  return '<span class="badge badge-draft">◌ Draft</span>';
+  return '<span class="badge badge-default">' + esc(s) + '</span>';
+}
+
+function elCard(e, idx) {
+  const delays = ["fade-in-delay-1","fade-in-delay-2","fade-in-delay-3",""];
+  const d = delays[Math.min(idx, 3)];
+  const totalVotes = e.candidates.reduce((s, c) => s + (c.votes || 0), 0);
+
+  const candidatesHtml = e.candidates.map(c =>
+    '<div class="admin-candidate-row">'
+    + '<span class="c-name">' + esc(c.name) + '</span>'
+    + '<span style="display:flex;align-items:center;gap:8px">'
+    +   '<span class="c-votes">' + (c.votes || 0) + ' votes</span>'
+    +   (e.status === "draft"
+          ? '<button class="danger" onclick="act(\'DELETE\',\'/api/admin/elections/' + e.id + '/candidates/' + c.id + '\')">Remove</button>'
+          : '')
+    + '</span>'
+    + '</div>'
+  ).join("");
+
+  const addCandidateRow = e.status === "draft"
+    ? '<div class="add-candidate-row"><input id="n_' + e.id + '" placeholder="Candidate name"><button onclick="addC(\'' + e.id + '\')">+ Add</button></div>'
+    : '';
+
+  const actions = '<div class="btn-row">'
+    + (e.status === "draft"   ? '<button onclick="st(\'' + e.id + '\',\'open\')">▶ Open Election</button>' : '')
+    + (e.status === "open"    ? '<button class="danger" onclick="st(\'' + e.id + '\',\'closed\')">■ Close Election</button>' : '')
+    + '<button class="sec" onclick="act(\'PUT\',\'/api/admin/elections/' + e.id + '\',{results_published:' + !e.results_published + '})">'
+    +   (e.results_published ? '🔒 Unpublish Results' : '📢 Publish Results')
+    + '</button>'
+    + '<a href="/results?e=' + e.id + '"><button class="sec">📊 View Results</button></a>'
+    + '</div>';
+
+  return '<div class="card fade-in ' + d + '">'
+    + '<div class="election-header">'
+    +   '<div><h3>' + esc(e.title) + '</h3>'
+    +   '<div class="election-meta">🕐 ' + esc(e.start_time) + ' &rarr; ' + esc(e.end_time) + '</div></div>'
+    +   statusDot(e.effective_status)
+    + '</div>'
+    + '<div class="stats-row">'
+    +   '<div class="stat-chip"><div class="stat-value">' + e.candidates.length + '</div><div class="stat-label">Candidates</div></div>'
+    +   '<div class="stat-chip"><div class="stat-value">' + totalVotes + '</div><div class="stat-label">Total Votes</div></div>'
+    +   '<div class="stat-chip"><div class="stat-value">' + (e.results_published ? '✓' : '—') + '</div><div class="stat-label">Published</div></div>'
+    + '</div>'
+    + '<div class="section-title">Candidates</div>'
+    + candidatesHtml
+    + addCandidateRow
+    + '<div class="divider"></div>'
+    + actions
+    + '</div>';
+}
+
+async function act(method, url, body) {
+  try {
+    const r = await apiFetch(url, { method, body: body ? JSON.stringify(body) : undefined });
+    show(r.message, true);
+    load();
+  } catch(e) { show(e.message); }
+}
+
+const st   = (id, s) => act("POST", "/api/admin/elections/" + id + "/status", { status: s });
+const addC = id => act("POST", "/api/admin/elections/" + id + "/candidates", { name: document.getElementById("n_" + id).value });
+
+async function createEl() {
+  const s = document.getElementById("s").value;
+  const e = document.getElementById("e").value;
+  if (!s || !e) return show("Please set both start and end times.");
+  try {
+    const r = await apiFetch("/api/admin/elections", {
+      method: "POST",
+      body: JSON.stringify({
+        title: document.getElementById("t").value,
+        description: document.getElementById("d").value,
+        start_time: new Date(s).toISOString(),
+        end_time: new Date(e).toISOString()
+      })
+    });
+    show(r.message, true);
+    // Clear form
+    ["t","d","s","e"].forEach(id => document.getElementById(id).value = "");
+    load();
+  } catch(x) { show(x.message); }
+}
+
+init();
+</script>
+</body>
+</html>
